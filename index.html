@@ -65,12 +65,51 @@ table.grid{border-collapse:separate;border-spacing:3px;font-size:13px;width:100%
 .stat{flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px}
 .stat b{display:block;font-size:28px}
 .stat span{color:var(--muted);font-size:13px}
-.bars{display:grid;grid-template-columns:auto 1fr auto;gap:7px 12px;align-items:center;font-size:13px}
-.bars .t{background:var(--soft);height:14px;border-radius:4px;overflow:hidden}
-.bars .f{height:100%;border-radius:4px}
-.bars .lb{display:flex;align-items:center;gap:8px;white-space:nowrap}
-.bars .n{color:var(--muted);text-align:right;white-space:nowrap}
-@media (max-width:820px){.layout{grid-template-columns:1fr}aside{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}ul{max-height:240px}main{padding:20px 14px}.map td.cot{width:auto}}
+.bars{display:flex;flex-direction:column;gap:8px;font-size:13px}
+.bar{display:grid;grid-template-columns:290px 1fr 140px;grid-template-areas:"lb t n";gap:12px;align-items:center}
+.bar .lb{grid-area:lb;display:flex;align-items:center;gap:8px;min-width:0}
+.bar .t{grid-area:t;background:var(--soft);height:14px;border-radius:4px;overflow:hidden}
+.bar .f{height:100%;border-radius:4px}
+.bar .n{grid-area:n;color:var(--muted);text-align:right;white-space:nowrap}
+/* sticky first column so row labels stay visible while scrolling the grid sideways */
+.grid tr>:first-child{position:sticky;left:0;background:var(--panel);z-index:1}
+/* phone-only pieces */
+.picker,.cards{display:none}
+.cards .co-card{border-top:1px solid var(--line);padding:14px 0}
+.cards .co-card:first-child{border-top:0;padding-top:0}
+.cards .co-h{font-weight:600;margin-bottom:2px}
+.cards .co-t{margin:0 0 10px}
+.cards .m{display:flex;gap:10px;align-items:flex-start;background:var(--bg);border-radius:10px;padding:10px;margin-top:8px}
+.cards .m .body{flex:1;min-width:0}
+.cards .m .top{display:flex;justify-content:space-between;gap:8px;align-items:center;font-weight:600;font-size:14px}
+.cards .m p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.cards .none{color:var(--muted);font-size:14px}
+@media (max-width:820px){
+  header{padding:12px 14px;gap:10px;flex-wrap:nowrap;position:static}
+  header .sub{font-size:12px}
+  header h1{font-size:17px}
+  nav{margin-left:auto}
+  nav button{padding:6px 12px}
+  .layout{display:block}
+  aside{display:none}
+  .picker{display:block;position:sticky;top:0;z-index:4;background:var(--bg);padding:10px 14px;border-bottom:1px solid var(--line)}
+  .picker select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:inherit;font:inherit;font-weight:500}
+  main{padding:18px 14px 48px}
+  h2{font-size:21px;line-height:1.25}
+  .card{padding:16px 14px;border-radius:12px}
+  .map-table{display:none}
+  .cards{display:block}
+  .stat{min-width:0;flex:1 1 0;padding:12px}
+  .stat span{font-size:12px}
+  .stat b{font-size:22px}
+  .bar{grid-template-columns:1fr auto;grid-template-areas:"lb n" "t t";gap:4px 8px}
+  .bar .lb span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  table.grid{min-width:0;width:auto;border-spacing:2px;font-size:12px}
+  .grid thead th span{height:24px;min-width:24px}
+  .grid td{height:26px;min-width:24px}
+  .grid td.name{max-width:120px;font-size:12px}
+  .key{gap:10px}
+}
 </style>
 </head>
 <body>
@@ -78,6 +117,7 @@ table.grid{border-collapse:separate;border-spacing:3px;font-size:13px;width:100%
   <div><h1>CO–SDG Mapping</h1><div class="sub" id="sub"></div></div>
   <nav><button data-v="subject" class="on">Subjects</button><button data-v="summary">Summary</button></nav>
 </header>
+<div class="picker"><select id="pick" aria-label="Choose a subject"></select></div>
 <div class="layout">
   <aside>
     <input id="q" type="search" placeholder="Search subjects…">
@@ -123,7 +163,10 @@ function subject(){
   const grid=s.cos.map(c=>`<tr><th class="r" title="${esc(c.t)}">${esc(c.id)}</th>${N.map(n=>{const v=c.m[n]||0;return `<td class="v${v}" title="${esc(c.id)} – SDG ${n}: ${LEVEL[v]||"none"}">${v||""}</td>`;}).join("")}</tr>`).join("");
   $("#main").innerHTML=`<h2>${esc(s.name)}</h2><div class="meta">${esc(s.code)} · ${s.cos.length} course outcomes</div>
   <div class="chips">${Object.keys(mx).sort((a,b)=>mx[b]-mx[a]||a-b).map(n=>`<span class="chip">${badge(n)}${esc(SDG[n][0])}</span>`).join("")}</div>
-  <div class="card"><h3>CO–SDG mapping</h3><div class="wrap"><table class="map"><thead><tr><th>CO</th><th>Course outcome</th><th>SDG</th><th style="text-align:center">Level</th><th>Justification</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+  <div class="card"><h3>CO–SDG mapping</h3>
+  <div class="cards">${s.cos.map(c=>{const ks=Object.keys(c.m).sort((a,b)=>a-b);
+    return `<div class="co-card"><div class="co-h">${esc(c.id)}</div><p class="co-t">${esc(c.t)}</p>${ks.length?ks.map(k=>`<div class="m">${badge(k)}<div class="body"><div class="top"><span>SDG ${k} · ${esc(SDG[k][0])}</span><span class="lv lv${c.m[k]}" title="${LEVEL[c.m[k]]}">${c.m[k]}</span></div><p>${esc(c.j[k]||"")}</p></div></div>`).join(""):`<div class="none">No SDG mapped</div>`}</div>`;}).join("")}</div>
+  <div class="wrap map-table"><table class="map"><thead><tr><th>CO</th><th>Course outcome</th><th>SDG</th><th style="text-align:center">Level</th><th>Justification</th></tr></thead><tbody>${rows}</tbody></table></div></div>
   <div class="card"><h3>Mapping matrix</h3><div class="wrap"><table class="grid">${gridHead}<tbody>${grid}</tbody></table></div>${key}</div>`;
 }
 
@@ -133,14 +176,16 @@ function summary(){
   const top=Math.max(...cnt.slice(1)),covered=N.filter(n=>cnt[n]).length;
   $("#main").innerHTML=`<h2>Summary</h2><div class="meta">SDG coverage across all subjects</div>
   <div class="stats"><div class="stat"><b>${SUBJECTS.length}</b><span>Subjects</span></div><div class="stat"><b>${SUBJECTS.reduce((a,s)=>a+s.cos.length,0)}</b><span>Course outcomes</span></div><div class="stat"><b>${covered} / 17</b><span>SDGs covered</span></div></div>
-  <div class="card"><h3>Subjects per SDG</h3><div class="bars">${N.map(n=>`<div class="lb">${badge(n)}${esc(SDG[n][0])}</div><div class="t"><div class="f" style="width:${cnt[n]/top*100}%;background:${SDG[n][1]}"></div></div><div class="n">${cnt[n]} subjects · ${co[n]} COs</div>`).join("")}</div></div>
+  <div class="card"><h3>Subjects per SDG</h3><div class="bars">${N.map(n=>`<div class="bar"><div class="lb">${badge(n)}<span>${esc(SDG[n][0])}</span></div><div class="t"><div class="f" style="width:${cnt[n]/top*100}%;background:${SDG[n][1]}"></div></div><div class="n">${cnt[n]} subj · ${co[n]} COs</div></div>`).join("")}</div></div>
   <div class="card"><h3>Subject × SDG</h3><div class="wrap"><table class="grid">${gridHead}<tbody>${SUBJECTS.map(s=>{const m=maxOf(s);return `<tr><td class="name" data-c="${esc(s.code)}" title="${esc(s.code)}">${esc(s.name)}</td>${N.map(n=>`<td class="v${m[n]||0}">${m[n]||""}</td>`).join("")}</tr>`;}).join("")}</tbody></table></div>${key}</div>`;
 }
 
 function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.v===view));
   list();(view==="subject"?subject:summary)();
+  $("#pick").innerHTML=(view==="summary"?`<option value="">Open a subject…</option>`:"")+SUBJECTS.map(s=>`<option value="${esc(s.code)}"${view==="subject"&&s.code===current?" selected":""}>${esc(s.name)} (${esc(s.code)})</option>`).join("");
 }
+$("#pick").onchange=e=>{if(e.target.value)open(e.target.value);};
 const open=c=>{current=c;view="subject";render();scrollTo(0,0);};
 document.querySelector("nav").onclick=e=>{const b=e.target.closest("button");if(b){view=b.dataset.v;render();}};
 $("#list").onclick=e=>{const li=e.target.closest("[data-c]");if(li)open(li.dataset.c);};
