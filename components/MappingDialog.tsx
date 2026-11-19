@@ -1,22 +1,23 @@
 "use client";
 
 // ──────────────────────────────────────────────────────────────────────
-// WHAT: The dialog that opens when you click a cell in the WK or SDG grid (browser).
+// WHAT: The dialog that opens when you click a cell in the WK, SDG, PO or PSO grid (browser).
 // HOW:  Pick a level 0-3 and write the justification. Level 0 deletes the mapping; 1-3 saves it ("upsert").
 //       Saved rows get source = "manual", which removes the purple "AI" tag.
 // ──────────────────────────────────────────────────────────────────────
 
 import { useState } from "react";
 import { ErrorNote, Modal } from "@/components/Modal";
-import { LEVEL_LABEL, SDG, WK, type Kind } from "@/lib/reference";
+import { LEVEL_LABEL, type Kind, type RefItem } from "@/lib/reference";
 import { createClient } from "@/lib/supabase/client";
 import type { Mapping, Outcome } from "@/lib/types";
 
-/** Set the level (0–3) and justification of one CO × WK/SDG cell. Level 0 removes it. */
+/** Set the level (0–3) and justification of one CO × WK/SDG/PO/PSO cell. Level 0 removes it. */
 export default function MappingDialog({
   outcome,
   kind,
   num,
+  item,
   current,
   onClose,
   onSaved,
@@ -24,11 +25,12 @@ export default function MappingDialog({
   outcome: Outcome;
   kind: Kind;
   num: number;
+  /** Name and description of the WK/SDG/PO/PSO being mapped (shown for reference). */
+  item?: RefItem;
   current?: Mapping;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const ref = (kind === "WK" ? WK : SDG).find((x) => x.num === num)!;
   const [level, setLevel] = useState(current?.level ?? 2);
   const [text, setText] = useState(current?.justification ?? "");
   const [busy, setBusy] = useState(false);
@@ -59,9 +61,10 @@ export default function MappingDialog({
       <p className="mt-3 text-sm">
         <b>
           {kind}
-          {num} – {ref.name}
+          {num}
+          {item && item.name !== `${kind}${num}` ? ` – ${item.name}` : ""}
         </b>
-        <span className="block text-xs text-slate-500">{ref.description}</span>
+        {item && <span className="block text-xs text-slate-500">{item.description}</span>}
       </p>
       <div className="mt-4">
         <label className="label">Level</label>

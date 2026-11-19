@@ -1,6 +1,6 @@
 # CO Mapping
 
-A website for mapping each subject's **course outcomes (COs)** to the **WK knowledge profile (WK1–WK9)** and the **SDGs (SDG1–SDG17)**, and exporting a PDF in the college's CO–SDG mapping format (EET413 layout). Subjects and COs come from Excel; an **AI suggests the WK/SDG mapping**; faculty review it and export the PDF.
+A website for mapping each subject's **course outcomes (COs)** to the **WK knowledge profile (WK1–WK9)**, the **SDGs (SDG1–SDG17)**, the **NBA Programme Outcomes (PO1–PO11)** and the programme's **PSOs**, and exporting a PDF in the college's CO–SDG mapping format (EET413 layout) plus a CO–PO–PSO matrix. Subjects and COs come from Excel; an **AI suggests all four mappings**; faculty review them and export the PDF.
 
 **Stack:** Next.js 16 + React 19 + TypeScript · Tailwind CSS 4 · Supabase (database + sign-in) · pdf-lib (PDF) · SheetJS (Excel) · any OpenAI-compatible AI (Gemini by default).
 
@@ -15,9 +15,9 @@ A website for mapping each subject's **course outcomes (COs)** to the **WK knowl
    One row per CO: `Scheme | Semester | Course Code | Course Name | Department | CO | CO Statement | K Level | Module Title | Topics`
    (only Course Code, Course Name, CO and CO Statement are required; *Download a template* in the import dialog).
    A row per subject with `CO1, CO2, …` columns also works. Re-importing a subject updates it: its COs become the COs in the file.
-3. **Open a subject → Map with AI**: every CO is mapped to WK1–9 and SDG1–17 with a level (1–3) and a one-line justification.
+3. **Open a subject → Map with AI**: every CO is mapped to WK1–9, SDG1–17, PO1–11 and PSO1–3 with a level (1–3) and a one-line justification. The AI is told NBA's PO↔WK links so PO and WK levels stay consistent.
 4. **Review**: click any cell to change its level or justification. *Re-map with AI* asks again (replacing the AI's and your edits).
-5. **Export PDF**: course outcomes · WK table per CO · CO–WK matrix + legend · CO–SDG table · SDG legend · CO×SDG matrix.
+5. **Export PDF**: course outcomes · WK table per CO · CO–WK matrix + legend · CO–SDG table · SDG legend · CO×SDG matrix · **CO–PO–PSO matrix with column averages** + PO/PSO legend.
 
 Without an AI key, *Map with AI* shows a prompt to paste into any AI chat; paste its answer back with *Paste AI table…*.
 
@@ -30,6 +30,7 @@ Without an AI key, *Map with AI* shows a prompt to paste into any AI chat; paste
 ### 1. Database
 Supabase → **SQL Editor** → paste all of `supabase/schema.sql` → **Run**.
 It creates everything (tables, access rules, functions). ⚠ Running it again deletes all subjects.
+Already set up with an older version? Run `supabase/update_3_po_pso.sql` instead (adds PO/PSO, keeps your data).
 
 ### 2. Sign-in settings (Supabase → Authentication)
 - **URL Configuration**: Site URL = your site's address; Redirect URLs: add `<your address>/auth/callback`
@@ -56,7 +57,7 @@ npm run dev          # http://localhost:3000 (restart after changing .env.local)
 ```
 
 ### 5. First steps in the app
-**Settings** → college name (printed at the top of every PDF) and, optionally, your college email domain. Then **Import from Excel**.
+**Settings** → college name (printed at the top of every PDF), the programme's **PSO1–PSO3** statements (pre-filled with the ECE PSOs) and, optionally, your college email domain. Then **Import from Excel**.
 
 ---
 
@@ -94,10 +95,10 @@ components/                 UI pieces that run in the browser
   OutcomeDialogs.tsx        add/edit a CO, paste many COs
   MappingDialog.tsx         set one cell's level + justification
   AiDialogs.tsx             manual AI route: copy prompt, paste answer
-  SettingsPanel.tsx         settings + people
+  SettingsPanel.tsx         college name, PSO statements, allowed domain, people
   Modal.tsx                 pop-up, confirm pop-up, error line
 lib/                        logic without UI
-  reference.ts              WK1–9, SDG1–17, K-levels, semesters
+  reference.ts              WK1–9, SDG1–17, PO1–11 (with their WK links), K-levels, semesters
   excel.ts                  reads subjects + COs from Excel/CSV; the import template
   ai.ts                     builds the AI prompt; reads the AI's table
   ai-server.ts              calls the AI provider (server only; holds the key)
@@ -108,12 +109,13 @@ lib/                        logic without UI
 proxy.ts                    runs before every request: session refresh, sign-in redirect
 next.config.ts              Next.js settings + security headers
 supabase/schema.sql         the whole database: tables, access rules, functions
+supabase/update_3_po_pso.sql  adds PO/PSO to a database created before this feature (keeps data)
 docs/NEXTJS_GUIDE.md        how Next.js works, using this project as the example
 ```
 
 ## Database
-`subjects` (scheme, semester, code, name, department) → `outcomes` (CO no, statement, K-level, module title/topics) → `mappings` (WK/SDG, number, level 1–3, justification, source manual/ai).
-`profiles` (role per person) · `settings` (college name, allowed domain) · view `subject_summary` (list counts) · functions `replace_mappings` (saves AI results) and `import_subjects` (Excel import). Every table has row-level security: viewers read, editors and admins write.
+`subjects` (scheme, semester, code, name, department) → `outcomes` (CO no, statement, K-level, module title/topics) → `mappings` (WK/SDG/PO/PSO, number, level 1–3, justification, source manual/ai).
+`profiles` (role per person) · `settings` (college name, allowed domain, PSO statements) · view `subject_summary` (list counts) · functions `replace_mappings` (saves AI results) and `import_subjects` (Excel import). Every table has row-level security: viewers read, editors and admins write.
 
 ## Commands
 | | |

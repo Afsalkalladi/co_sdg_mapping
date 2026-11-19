@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────
 // WHAT: Draws the CO–WK–SDG PDF for one subject (runs in the browser, uses the pdf-lib library).
 // LAYOUT (same order as the template): title block -> course outcomes table -> one WK table per CO ->
-//       CO–WK matrix + WK legend -> CO–SDG table -> SDG legend -> CO×SDG matrix.
+//       CO–WK matrix + WK legend -> CO–SDG table -> SDG legend -> CO×SDG matrix,
+//       then an extra last page: the CO–PO–PSO matrix (with column averages) + PO/PSO legend.
 // STRUCTURE: Doc (pages, fonts, text wrapping) -> drawTable (bordered tables that continue on the next
 //       page) -> buildReport (puts the sections together).
 // ──────────────────────────────────────────────────────────────────────
@@ -9,10 +10,10 @@
 // Builds the CO–WK–SDG mapping PDF for one subject, in the layout of the
 // EET413 template: A4 landscape, Times, bordered tables.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
-import { SDG, WK } from "../reference";
+import { PO, SDG, WK, type Kind } from "../reference";
 
 export type ReportOutcome = { co_no: number; statement: string; k_level: string | null; title: string; topics: string };
-export type ReportMapping = { co_no: number; kind: "WK" | "SDG"; num: number; level: number; justification: string };
+export type ReportMapping = { co_no: number; kind: Kind; num: number; level: number; justification: string };
 export type ReportData = {
   college: string;
   department: string;
@@ -20,6 +21,8 @@ export type ReportData = {
   name: string;
   outcomes: ReportOutcome[];
   mappings: ReportMapping[];
+  /** The programme's PSO statements (PSO1, PSO2, …) for the CO–PO–PSO page. */
+  psos: string[];
 };
 
 // ───────────────────────── Page and style constants ─────────────────────────
@@ -337,7 +340,7 @@ export async function buildReport(data: ReportData): Promise<Uint8Array> {
 
   const outcomes = [...data.outcomes].sort((a, b) => a.co_no - b.co_no);
   const lv = new Map(data.mappings.map((m) => [`${m.kind}:${m.co_no}:${m.num}`, m]));
-  const get = (kind: "WK" | "SDG", co: number, num: number) => lv.get(`${kind}:${co}:${num}`);
+  const get = (kind: Kind, co: number, num: number) => lv.get(`${kind}:${co}:${num}`);
   const dash = (n: number | undefined) => (n ? String(n) : "-");
 
   // 1. Title block
@@ -512,6 +515,65 @@ export async function buildReport(data: ReportData): Promise<Uint8Array> {
       })),
     ],
   });
+
+  // 8. CO–PO–PSO matrix on its own page (the NBA "articulation matrix"), with the average of each
+  //    column in the last row, followed by a legend of the POs and the programme's PSOs.
+  const psos = (data.psos ?? []).filter((t) => t.trim());
+  const cols: { kind: Kind; num: number; label: string }[] = [
+    ...PO.map((p) => ({ kind: "PO" as Kind, num: p.num, label: `PO${p.num}` })),
+    ...psos.map((_, i) => ({ kind: "PSO" as Kind, num: i + 1, label: `PSO${i + 1}` })),
+  ];
+  const avg = (c: { kind: Kind; num: number }) => {
+    const v = outcomes.map((o) => get(c.kind, o.co_no, c.num)?.level ?? 0).filter((x) => x > 0);
+    return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : "-";
+  };
+  doc.newPage();
+  doc.centeredText(`CO – PO – PSO MAPPING – ${data.code} – ${data.name}`.toUpperCase(), 13, true);
+  doc.y -= 12;
+  const pcW = (W - 50) / cols.length;
+  drawTable(doc, {
+    widths: [50, ...cols.map(() => pcW)],
+    border: BLUE,
+    size: 10,
+    groups: [
+      { rows: [[{ text: "CO", bold: true, align: "center", fill: BLUE_FILL }, ...cols.map((c) => ({ text: c.label, bold: true, align: "center" as const, fill: BLUE_FILL }))]] },
+      ...outcomes.map((o) => ({
+        rows: [[
+          { text: `CO${o.co_no}`, fill: BLUE_LIGHT, align: "center" as const },
+          ...cols.map((c) => ({ text: dash(get(c.kind, o.co_no, c.num)?.level), align: "center" as const })),
+        ]],
+      })),
+      { rows: [[{ text: "Average", bold: true, align: "center", fill: BLUE_LIGHT }, ...cols.map((c) => ({ text: avg(c), bold: true, align: "center" as const }))]] },
+    ],
+  });
+  doc.y -= 8;
+  doc.drawLines(doc.wrap([{ text: "3 – High, 2 – Medium, 1 – Low, \"-\" – no correlation. Average = mean of the non-zero levels in the column." }], W, 9), M.left, doc.y, W, 9, "left");
+  doc.y -= 24;
+
+  // PO names (3 per row) and the PSO statements in full.
+  const poRows: Cell[][] = [];
+  for (let i = 0; i < PO.length; i += 3) {
+    const row: Cell[] = PO.slice(i, i + 3).map((p) => ({ rich: [{ text: `PO${p.num}`, bold: true }, { text: ` – ${p.name}` }] }));
+    while (row.length < 3) row.push({ text: "" });
+    poRows.push(row);
+  }
+  drawTable(doc, {
+    widths: [W / 3, W / 3, W / 3],
+    border: BLACK,
+    size: 9.5,
+    header: [{ rows: [[{ text: "Programme Outcomes (POs)", bold: true, align: "center", colSpan: 3, size: 10.5 }]] }],
+    groups: poRows.map((r) => ({ rows: [r] })),
+  });
+  if (psos.length) {
+    doc.y -= 14;
+    drawTable(doc, {
+      widths: [50, W - 50],
+      border: BLACK,
+      size: 9.5,
+      header: [{ rows: [[{ text: "Programme Specific Outcomes (PSOs)", bold: true, align: "center", colSpan: 2, size: 10.5 }]] }],
+      groups: psos.map((t, i) => ({ rows: [[{ text: `PSO${i + 1}`, bold: true, align: "center" as const }, { text: t }]] })),
+    });
+  }
 
   return pdf.save();
 }

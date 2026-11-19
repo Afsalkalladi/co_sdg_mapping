@@ -1,7 +1,8 @@
 "use client";
 
 // ──────────────────────────────────────────────────────────────────────
-// WHAT: The manual AI route, used when no AI key is configured (or to paste a table by hand):
+// WHAT: The manual AI route, used when no AI key is configured (or to paste a table by hand).
+//       Works for all four frameworks: WK, SDG, PO and PSO.
 //   PromptDialog  -> shows a ready-made prompt to copy into ChatGPT / Gemini / Claude.
 //   PasteAiDialog -> paste (or upload) the AI's table; it is read with parseAiTable and saved with replace_mappings.
 // ──────────────────────────────────────────────────────────────────────
@@ -9,15 +10,29 @@
 import { useMemo, useState } from "react";
 import { ErrorNote, Modal } from "@/components/Modal";
 import { buildPrompt, CSV_HEADER, parseAiTable } from "@/lib/ai";
-import type { Kind } from "@/lib/reference";
+import { KINDS, type Kind } from "@/lib/reference";
 import { createClient } from "@/lib/supabase/client";
 import type { Outcome, Subject } from "@/lib/types";
 
 /** Step 2: show the prompt to paste into ChatGPT, Claude, Gemini, … */
-export function PromptDialog({ subject, outcomes, onClose }: { subject: Subject; outcomes: Outcome[]; onClose: () => void }) {
-  const [kinds, setKinds] = useState<Kind[]>(["WK", "SDG"]);
+export function PromptDialog({
+  subject,
+  outcomes,
+  psos,
+  onClose,
+}: {
+  subject: Subject;
+  outcomes: Outcome[];
+  psos: string[];
+  onClose: () => void;
+}) {
+  // Which frameworks to ask for (PSO only when Settings has PSO statements). All are ticked at first.
+  const available = KINDS.filter((k) => k !== "PSO" || psos.length > 0);
+  const [kinds, setKinds] = useState<Kind[]>(available);
   const [copied, setCopied] = useState(false);
-  const prompt = useMemo(() => buildPrompt({ ...subject, outcomes }, kinds), [subject, outcomes, kinds]);
+  const prompt = useMemo(() => buildPrompt({ ...subject, outcomes, psos }, kinds), [subject, outcomes, psos, kinds]);
+  const toggle = (k: Kind) =>
+    setKinds((cur) => (cur.includes(k) ? (cur.length > 1 ? cur.filter((x) => x !== k) : cur) : KINDS.filter((x) => x === k || cur.includes(x))));
 
   async function copy() {
     try {
@@ -38,16 +53,10 @@ export function PromptDialog({ subject, outcomes, onClose }: { subject: Subject;
       </ol>
       <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
         <span className="text-slate-500">Map to:</span>
-        {(
-          [
-            [["WK", "SDG"], "WK and SDG"],
-            [["WK"], "WK only"],
-            [["SDG"], "SDG only"],
-          ] as [Kind[], string][]
-        ).map(([k, label]) => (
-          <label key={label} className="inline-flex items-center gap-1.5">
-            <input type="radio" name="kinds" checked={k.join() === kinds.join()} onChange={() => setKinds(k)} className="accent-brand" />
-            {label}
+        {available.map((k) => (
+          <label key={k} className="inline-flex items-center gap-1.5">
+            <input type="checkbox" checked={kinds.includes(k)} onChange={() => toggle(k)} className="accent-brand" />
+            {k}
           </label>
         ))}
       </div>
@@ -68,12 +77,15 @@ export function PromptDialog({ subject, outcomes, onClose }: { subject: Subject;
 export function PasteAiDialog({
   subjectId,
   outcomes,
+  psoCount,
   existing,
   onClose,
   onSaved,
 }: {
   subjectId: number;
   outcomes: Outcome[];
+  /** How many PSOs are defined in Settings (PSO numbers above this are rejected). */
+  psoCount: number;
   existing: Record<Kind, number>;
   onClose: () => void;
   onSaved: () => void;
@@ -82,7 +94,7 @@ export function PasteAiDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cos = useMemo(() => outcomes.map((o) => o.co_no), [outcomes]);
-  const result = useMemo(() => (text.trim() ? parseAiTable(text, cos) : null), [text, cos]);
+  const result = useMemo(() => (text.trim() ? parseAiTable(text, cos, psoCount) : null), [text, cos, psoCount]);
 
   async function loadFile(f: File | undefined) {
     if (!f) return;
@@ -126,7 +138,7 @@ export function PasteAiDialog({
         className="input mt-3 min-h-44 font-mono text-xs"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={`${CSV_HEADER}\nCO1,WK,2,3,"Fundamental torque equations require mathematical modelling."\nCO1,SDG,7,3,"Energy efficiency and efficient operation of electrical drives."`}
+        placeholder={`${CSV_HEADER}\nCO1,WK,2,3,"Requires deriving and solving the mathematical model of the system."\nCO1,PO,1,3,"Applies engineering fundamentals to analyse the system."`}
       />
       <input type="file" accept=".csv,.txt,.xlsx,.xls" className="mt-2 text-sm" onChange={(e) => loadFile(e.target.files?.[0])} />
 
@@ -150,7 +162,7 @@ export function PasteAiDialog({
                     </tr>
                   </thead>
                   <tbody>
-                    {(["WK", "SDG"] as Kind[]).map((k) => (
+                    {KINDS.filter((k) => k !== "PSO" || psoCount > 0).map((k) => (
                       <tr key={k}>
                         <td className="pr-3 font-medium">{k}</td>
                         {perCo(k).map((n, i) => (
@@ -164,7 +176,7 @@ export function PasteAiDialog({
                 </table>
               </div>
               <p className="mt-3 text-slate-600">
-                Saving <b>replaces</b> this subject’s current {result.kinds.join(" and ")} mappings
+                Saving <b>replaces</b> this subject’s current {result.kinds.join(", ")} mappings
                 {result.kinds.some((k) => existing[k] > 0) &&
                   ` (${result.kinds.map((k) => `${existing[k]} ${k}`).join(", ")} now)`}
                 . You can still edit any cell afterwards.

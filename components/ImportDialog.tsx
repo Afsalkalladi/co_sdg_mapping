@@ -174,7 +174,7 @@ export default function ImportDialog({
             </table>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            For subjects that already exist, the COs are replaced by the file’s COs. Existing WK/SDG mappings are kept for CO numbers
+            For subjects that already exist, the COs are replaced by the file’s COs. Existing mappings (WK, SDG, PO, PSO) are kept for CO numbers
             that are still there; use <b>Map with AI</b> again if a CO’s text changed.
           </p>
           {result.warnings.length > 0 && (

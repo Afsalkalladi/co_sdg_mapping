@@ -16,7 +16,7 @@ import { SEMESTERS } from "@/lib/reference";
 import { createClient } from "@/lib/supabase/client";
 import type { Subject } from "@/lib/types";
 
-export type SubjectRow = Subject & { co_count: number; wk_count: number; sdg_count: number };
+export type SubjectRow = Subject & { co_count: number; wk_count: number; sdg_count: number; po_count: number; pso_count: number };
 
 const LAST_SCHEME = "co-mapping:scheme";
 
@@ -147,7 +147,7 @@ export default function SubjectList({
                   <div className="mt-0.5 font-semibold leading-snug">{r.name}</div>
                   <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
                     <Chip ok={r.co_count > 0}>{r.co_count} COs</Chip>
-                    <Chip ok={r.wk_count > 0 && r.sdg_count > 0}>{r.wk_count + r.sdg_count > 0 ? "Mapped" : "Not mapped"}</Chip>
+                    <Chip ok={mappedCount(r) > 0}>{mappedCount(r) > 0 ? "Mapped" : "Not mapped"}</Chip>
                   </div>
                 </Link>
               </li>
@@ -191,6 +191,11 @@ export default function SubjectList({
       )}
     </div>
   );
+}
+
+/** All WK/SDG/PO/PSO mappings of a subject (counts can be missing if the database update wasn't run yet). */
+function mappedCount(r: SubjectRow) {
+  return (r.wk_count ?? 0) + (r.sdg_count ?? 0) + (r.po_count ?? 0) + (r.pso_count ?? 0);
 }
 
 function Chip({ ok, children }: { ok: boolean; children: React.ReactNode }) {

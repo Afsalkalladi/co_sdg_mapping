@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────────────────────────────
 // WHAT: The Settings page UI (browser), admins only:
 //   - College name (printed at the top of every PDF) and the allowed sign-up email domain.
+//   - The programme's PSO statements (PSO1–PSO3), used by the AI and printed in the PDF.
 //   - People: change each person's role (Viewer / Editor / Admin). You can't change your own role.
 // ──────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ export default function SettingsPanel({ meId, settings, profiles }: { meId: stri
   const router = useRouter();
   const [college, setCollege] = useState(settings.college_name);
   const [domain, setDomain] = useState(settings.allowed_email_domain ?? "");
+  // PSO1–PSO3 statements (empty boxes = not used). Saved as a list in settings.psos.
+  const [psos, setPsos] = useState<string[]>([0, 1, 2].map((i) => settings.psos?.[i] ?? ""));
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +34,12 @@ export default function SettingsPanel({ meId, settings, profiles }: { meId: stri
     setError(null);
     const { error } = await createClient()
       .from("settings")
-      .update({ college_name: college.trim(), allowed_email_domain: domain.trim().replace(/^@/, "").toLowerCase() || null })
+      .update({
+        college_name: college.trim(),
+        allowed_email_domain: domain.trim().replace(/^@/, "").toLowerCase() || null,
+        // Keep PSOs in order; drop empty boxes at the end (PSO1 and PSO2 only, etc.).
+        psos: psos.map((t) => t.trim()).filter((t, i, all) => t || all.slice(i + 1).some(Boolean)),
+      })
       .eq("id", true);
     if (error) return setError(error.message);
     setSaved(true);
@@ -75,6 +83,24 @@ export default function SettingsPanel({ meId, settings, profiles }: { meId: stri
             }}
             placeholder="college.ac.in"
           />
+        </div>
+        <div>
+          <label className="label">Programme Specific Outcomes (PSOs): used by the AI and printed in the PDF. Leave unused boxes empty.</label>
+          <div className="space-y-2">
+            {psos.map((t, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="mt-2 w-12 shrink-0 text-sm font-semibold">PSO{i + 1}</span>
+                <textarea
+                  className="input min-h-16"
+                  value={t}
+                  onChange={(e) => {
+                    setPsos((cur) => cur.map((x, j) => (j === i ? e.target.value : x)));
+                    setSaved(false);
+                  }}
+                />
+              </div>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button className="btn btn-primary">Save</button>

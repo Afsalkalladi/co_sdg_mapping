@@ -1,7 +1,7 @@
 "use client";
 
 // ──────────────────────────────────────────────────────────────────────
-// WHAT: Everything on a subject's page (browser): title + buttons, the COs list, the WK/SDG grids
+// WHAT: Everything on a subject's page (browser): title + buttons, the COs list, the WK/SDG/PO/PSO grids
 //       with justifications, and all dialogs (edit CO, paste COs, edit a cell, confirm delete, ...).
 // KEY FUNCTIONS:
 //   runAi(coNos)  -> "Map with AI": calls /api/suggest for 2 COs at a time, shows progress, retries if slow/limited.
@@ -17,7 +17,7 @@ import MappingDialog from "@/components/MappingDialog";
 import { ConfirmDialog } from "@/components/Modal";
 import { OutcomeDialog, PasteOutcomesDialog } from "@/components/OutcomeDialogs";
 import { SubjectForm, listHref } from "@/components/SubjectList";
-import { SDG, WK, type Kind } from "@/lib/reference";
+import { KINDS, itemsOf, shortLabel, type Kind } from "@/lib/reference";
 import { createClient } from "@/lib/supabase/client";
 import type { Mapping, Outcome, Subject } from "@/lib/types";
 
@@ -26,6 +26,8 @@ type Props = {
   outcomes: Outcome[];
   mappings: Mapping[];
   college: string;
+  /** PSO statements from Settings (PSO1, PSO2, …). */
+  psos: string[];
   canEdit: boolean;
   isAdmin: boolean;
   aiEnabled: boolean;
@@ -54,7 +56,7 @@ const CELL = ["bg-stone-100 text-slate-400", "bg-lv1 text-slate-800", "bg-lv2 te
 export default function SubjectEditor(p: Props) {
   const router = useRouter();
   // ── Page state ──
-  // dialog: open pop-up · tab: WK or SDG grid · exporting: PDF being made · ai: AI status box
+  // dialog: open pop-up · tab: which grid (WK/SDG/PO/PSO) · exporting: PDF being made · ai: AI status box
   const [dialog, setDialog] = useState<Dialog>(null);
   const [tab, setTab] = useState<Kind>("WK");
   const [exporting, setExporting] = useState(false);
@@ -71,7 +73,11 @@ export default function SubjectEditor(p: Props) {
     setDialog(null);
     router.refresh();
   };
-  const mapped = count("WK") + count("SDG") > 0;
+  const mapped = p.mappings.length > 0;
+  // PSO statements from Settings ([] if none are set).
+  const psos = p.psos ?? [];
+  // Tabs to show: PSO only when Settings has PSO statements.
+  const kinds = KINDS.filter((k) => k !== "PSO" || psos.length > 0);
   /** "Map with AI": without an AI key, fall back to the copy-prompt dialog. */
   // The "Map with AI" / "Re-map with AI" button.
   // No AI key -> show the copy-prompt dialog. Already mapped -> ask before replacing. Otherwise -> run.
@@ -93,7 +99,7 @@ export default function SubjectEditor(p: Props) {
       for (let i = 0; i < batches.length; i++) {
         const b = batches[i];
         const label = b.length > 1 ? `CO${b[0]}–CO${b[b.length - 1]}` : `CO${b[0]}`;
-        setAi({ running: true, message: `AI is mapping ${label} to WK and SDG…${batches.length > 1 ? ` (${i + 1} of ${batches.length})` : ""}` });
+        setAi({ running: true, message: `AI is mapping ${label} to ${kinds.join(", ")}…${batches.length > 1 ? ` (${i + 1} of ${batches.length})` : ""}` });
         for (let attempt = 0; ; attempt++) {
           // Ask our server route to map this batch (the server talks to the AI and saves the result).
           const res = await fetch("/api/suggest", {
@@ -135,6 +141,7 @@ export default function SubjectEditor(p: Props) {
       const { buildReport } = await import("@/lib/pdf/report");
       const bytes = await buildReport({
         college: p.college,
+        psos: psos,
         department: p.subject.department,
         code: p.subject.code,
         name: p.subject.name,
@@ -144,7 +151,7 @@ export default function SubjectEditor(p: Props) {
       const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${p.subject.code.replace(/[^\w-]+/g, "_")}_CO_WK_SDG_Mapping.pdf`;
+      a.download = `${p.subject.code.replace(/[^\w-]+/g, "_")}_CO_Mapping.pdf`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
     } catch (e) {
@@ -154,8 +161,8 @@ export default function SubjectEditor(p: Props) {
     }
   }
 
-  // Columns of the grid that is showing: WK1–9 or SDG1–17.
-  const items = tab === "WK" ? WK : SDG;
+  // Columns of the grid that is showing: WK1–9, SDG1–17, PO1–11 or PSO1–3.
+  const items = itemsOf(tab, psos);
   const hasCos = p.outcomes.length > 0;
 
   return (
@@ -190,7 +197,7 @@ export default function SubjectEditor(p: Props) {
                 className={`btn ${mapped ? "" : "btn-primary"}`}
                 onClick={startMapping}
                 disabled={!hasCos || ai?.running}
-                title={hasCos ? "Map every CO to WK and SDG with AI" : "Add course outcomes first"}
+                title={hasCos ? `Map every CO to ${kinds.join(", ")} with AI` : "Add course outcomes first"}
               >
                 {ai?.running ? "Mapping…" : mapped ? "Re-map with AI" : "Map with AI"}
               </button>
@@ -221,7 +228,7 @@ export default function SubjectEditor(p: Props) {
             !hasCos && (
               <p className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
                 Add the course outcomes below (or import them from Excel on the Subjects page), then press <b>Map with AI</b>. Review
-                the WK and SDG grids and press <b>Export PDF</b>.
+                the WK, SDG, PO and PSO grids and press <b>Export PDF</b>.
               </p>
             )
           ) : (
@@ -319,12 +326,12 @@ export default function SubjectEditor(p: Props) {
         )}
       </section>
 
-      {/* WK / SDG mapping */}
+      {/* WK / SDG / PO / PSO mapping */}
       {hasCos && (
         <section className="card">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="inline-flex rounded-lg bg-stone-100 p-1">
-              {(["WK", "SDG"] as Kind[]).map((k) => (
+              {kinds.map((k) => (
                 <button
                   key={k}
                   onClick={() => setTab(k)}
@@ -351,7 +358,7 @@ export default function SubjectEditor(p: Props) {
                   <th className="sticky left-0 z-10 bg-white" />
                   {items.map((it) => (
                     <th key={it.num} className="min-w-8 px-0.5 pb-1 font-semibold text-slate-600" title={`${tab}${it.num}: ${it.name}`}>
-                      {tab === "WK" ? `WK${it.num}` : it.num}
+                      {shortLabel(tab, it.num)}
                     </th>
                   ))}
                 </tr>
@@ -400,7 +407,7 @@ export default function SubjectEditor(p: Props) {
                     <ul className="mt-1.5 space-y-1">
                       {list.map(({ it, m }) => (
                         <li key={it.num} className="flex items-start gap-3 rounded-lg bg-stone-50 px-3 py-1.5 text-sm">
-                          <span className="w-14 shrink-0 font-medium">
+                          <span className="w-14 shrink-0 font-medium" title={it.description}>
                             {tab} {it.num}
                           </span>
                           <span className={`grid h-6 w-6 shrink-0 place-items-center rounded text-xs font-semibold ${CELL[m!.level]}`}>{m!.level}</span>
@@ -450,7 +457,7 @@ export default function SubjectEditor(p: Props) {
       {dialog?.kind === "deleteOutcome" && (
         <ConfirmDialog
           title={`Delete CO${dialog.outcome.co_no}?`}
-          text="This deletes the course outcome and its WK and SDG mappings."
+          text="This deletes the course outcome and all its WK, SDG, PO and PSO mappings."
           run={() => createClient().from("outcomes").delete().eq("id", dialog.outcome.id)}
           onClose={close}
           onDone={saved}
@@ -462,7 +469,7 @@ export default function SubjectEditor(p: Props) {
       {dialog?.kind === "remapAll" && (
         <ConfirmDialog
           title="Re-map with AI?"
-          text={`The AI will redo the WK and SDG mappings of all ${p.outcomes.length} COs. Any changes you made to them will be replaced.`}
+          text={`The AI will redo the ${kinds.join(", ")} mappings of all ${p.outcomes.length} COs. Any changes you made to them will be replaced.`}
           action="Re-map all"
           run={async () => ({ error: null })}
           onClose={close}
@@ -472,15 +479,23 @@ export default function SubjectEditor(p: Props) {
           }}
         />
       )}
-      {dialog?.kind === "prompt" && <PromptDialog subject={p.subject} outcomes={p.outcomes} onClose={close} />}
+      {dialog?.kind === "prompt" && <PromptDialog subject={p.subject} outcomes={p.outcomes} psos={psos} onClose={close} />}
       {dialog?.kind === "pasteAi" && (
-        <PasteAiDialog subjectId={p.subject.id} outcomes={p.outcomes} existing={{ WK: count("WK"), SDG: count("SDG") }} onClose={close} onSaved={saved} />
+        <PasteAiDialog
+          subjectId={p.subject.id}
+          outcomes={p.outcomes}
+          psoCount={psos.length}
+          existing={{ WK: count("WK"), SDG: count("SDG"), PO: count("PO"), PSO: count("PSO") }}
+          onClose={close}
+          onSaved={saved}
+        />
       )}
       {dialog?.kind === "mapping" && (
         <MappingDialog
           outcome={dialog.outcome}
           kind={dialog.mapKind}
           num={dialog.num}
+          item={itemsOf(dialog.mapKind, psos).find((x) => x.num === dialog.num)}
           current={byKey.get(`${dialog.outcome.id}:${dialog.mapKind}:${dialog.num}`)}
           onClose={close}
           onSaved={saved}

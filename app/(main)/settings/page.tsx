@@ -12,13 +12,13 @@ export default async function SettingsPage() {
   const me = await requireAdmin();
   const supabase = await createClient();
   const [settings, profiles] = await Promise.all([
-    supabase.from("settings").select("college_name, allowed_email_domain").single(),
+    supabase.from("settings").select("college_name, allowed_email_domain, psos").single(),
     supabase.from("profiles").select("*").order("created_at"),
   ]);
   return (
     <SettingsPanel
       meId={me.id}
-      settings={(settings.data ?? { college_name: "", allowed_email_domain: null }) as Settings}
+      settings={(settings.data ?? { college_name: "", allowed_email_domain: null, psos: [] }) as Settings}
       profiles={(profiles.data ?? []) as Profile[]}
     />
   );

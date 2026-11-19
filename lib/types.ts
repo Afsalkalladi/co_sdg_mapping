@@ -8,7 +8,7 @@ import type { Kind } from "@/lib/reference";
 export type Role = "admin" | "editor" | "viewer";
 
 export type Profile = { id: string; email: string; full_name: string | null; role: Role; created_at?: string };
-export type Settings = { college_name: string; allowed_email_domain: string | null };
+export type Settings = { college_name: string; allowed_email_domain: string | null; psos: string[] };
 
 export type Subject = {
   id: number;

@@ -229,7 +229,7 @@ HTTP **status codes** used: 200 ok · 400 bad request · 401 not signed in · 40
 1. **Click**: `SubjectEditor` → `startMapping()` → `runAi([1,2,3,4,5,6])`.
 2. **Batches**: `runAi` splits the COs into pairs and, for each pair, `fetch("/api/suggest")`.
 3. **proxy.ts** runs first: the person is signed in, so the request continues.
-4. **`app/api/suggest/route.ts`**: checks the role → loads the two COs → `buildPrompt()` (`lib/ai.ts`) → `askAi()` (`lib/ai-server.ts`) sends it to Gemini.
+4. **`app/api/suggest/route.ts`**: checks the role → loads the two COs and the PSO statements → `buildPrompt()` (`lib/ai.ts`) → `askAi()` (`lib/ai-server.ts`) sends it to Gemini, asking for WK, SDG, PO and PSO at once.
 5. **Gemini** answers with a CSV table → `parseAiTable()` turns it into rows.
 6. **Database**: `supabase.rpc("replace_mappings", …)` runs the SQL function from `schema.sql`, replacing those COs' mappings in one transaction.
 7. **Back in the browser**: `router.refresh()` → the server page re-runs → the new grid values appear. The status box shows progress.

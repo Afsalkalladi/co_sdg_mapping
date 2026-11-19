@@ -1,11 +1,16 @@
 // ──────────────────────────────────────────────────────────────────────
-// WHAT: Fixed lists that never come from the database: WK1-9 and SDG1-17 (names, descriptions,
-//       SDG colours), K-levels, level labels and semesters. Used by the grids, the PDF and the AI prompt.
+// WHAT: Fixed lists that never come from the database: WK1-9, SDG1-17 (with colours) and PO1-11
+//       (NBA wording, with the WKs each PO refers to), plus K-levels, level labels and semesters.
+//       Used by the grids, the PDF and the AI prompt.
+// NOTE: PSOs are NOT here: they differ per programme, so admins enter them in Settings (database).
 // ──────────────────────────────────────────────────────────────────────
 
 // Fixed reference lists used by the editor, the PDF and the AI prompt.
 
-export type Kind = "WK" | "SDG";
+/** The four things a CO is mapped to. */
+export type Kind = "WK" | "SDG" | "PO" | "PSO";
+/** Order of the tabs on the subject page and of the sections in the prompt. */
+export const KINDS: Kind[] = ["WK", "SDG", "PO", "PSO"];
 
 /** Washington Accord knowledge profile (NBA Annexure I). */
 export const WK: { num: number; name: string; description: string }[] = [
@@ -41,7 +46,37 @@ export const SDG: { num: number; name: string; description: string; color: strin
   { num: 17, name: "Partnerships for the Goals", description: "Strengthen the means of implementation and revitalize global partnerships for sustainable development", color: "#19486A" },
 ];
 
-export const COUNT: Record<Kind, number> = { WK: 9, SDG: 17 };
+/** NBA Programme Outcomes (Annexure II). `wk` = the knowledge profile items each PO refers to. */
+export const PO: { num: number; name: string; description: string; wk: string }[] = [
+  { num: 1, name: "Engineering Knowledge", wk: "WK1–WK4", description: "Apply knowledge of mathematics, natural science, computing, engineering fundamentals and an engineering specialization as specified in WK1 to WK4 respectively to develop to the solution of complex engineering problems." },
+  { num: 2, name: "Problem Analysis", wk: "WK1–WK4", description: "Identify, formulate, review research literature and analyze complex engineering problems reaching substantiated conclusions with consideration for sustainable development." },
+  { num: 3, name: "Design/Development of Solutions", wk: "WK5", description: "Design creative solutions for complex engineering problems and design/develop systems/components/processes to meet identified needs with consideration for the public health and safety, whole-life cost, net zero carbon, culture, society and environment as required." },
+  { num: 4, name: "Conduct Investigations of Complex Problems", wk: "WK8", description: "Conduct investigations of complex engineering problems using research-based knowledge including design of experiments, modelling, analysis & interpretation of data to provide valid conclusions." },
+  { num: 5, name: "Engineering Tool Usage", wk: "WK2, WK6", description: "Create, select and apply appropriate techniques, resources and modern engineering & IT tools, including prediction and modelling recognizing their limitations to solve complex engineering problems." },
+  { num: 6, name: "The Engineer and The World", wk: "WK1, WK5, WK7", description: "Analyze and evaluate societal and environmental aspects while solving complex engineering problems for its impact on sustainability with reference to economy, health, safety, legal framework, culture and environment." },
+  { num: 7, name: "Ethics", wk: "WK9", description: "Apply ethical principles and commit to professional ethics, human values, diversity and inclusion; adhere to national & international laws." },
+  { num: 8, name: "Individual and Collaborative Team work", wk: "", description: "Function effectively as an individual, and as a member or leader in diverse/multi-disciplinary teams." },
+  { num: 9, name: "Communication", wk: "", description: "Communicate effectively and inclusively within the engineering community and society at large, such as being able to comprehend and write effective reports and design documentation, make effective presentations considering cultural, language, and learning differences." },
+  { num: 10, name: "Project Management and Finance", wk: "", description: "Apply knowledge and understanding of engineering management principles and economic decision-making and apply these to one’s own work, as a member and leader in a team, and to manage projects and in multidisciplinary environments." },
+  { num: 11, name: "Life-Long Learning", wk: "WK8", description: "Recognize the need for, and have the preparation and ability for i) independent and life-long learning ii) adaptability to new and emerging technologies and iii) critical thinking in the broadest context of technological change." },
+];
+
+/** A row of a grid/legend: number, short name and full description. */
+export type RefItem = { num: number; name: string; description: string; color?: string };
+
+/** The items of one kind. PSOs come from Settings, so they are passed in. */
+export function itemsOf(kind: Kind, psos: string[]): RefItem[] {
+  if (kind === "WK") return WK;
+  if (kind === "SDG") return SDG;
+  if (kind === "PO") return PO;
+  return psos.map((text, i) => ({ num: i + 1, name: `PSO${i + 1}`, description: text }));
+}
+
+/** Short column label: "WK3", "7" (SDG), "PO5", "PSO2". */
+export const shortLabel = (kind: Kind, num: number) => (kind === "SDG" ? String(num) : `${kind}${num}`);
+
+/** How many items each kind has (PSO: at most 3; the real number comes from Settings). */
+export const COUNT: Record<Kind, number> = { WK: 9, SDG: 17, PO: 11, PSO: 3 };
 export const K_LEVELS = ["K1", "K2", "K3", "K4", "K5", "K6"];
 export const LEVEL_LABEL = ["–", "Low", "Medium", "High"];
 

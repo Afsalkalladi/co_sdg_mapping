@@ -47,13 +47,15 @@ create table public.profiles (
   created_at timestamptz not null default now()
 );
 
--- Single row: the college name printed on every PDF, and who may sign up.
+-- Single row: the college name printed on every PDF, who may sign up, and the programme's
+-- PSO statements (a JSON list of 1–3 texts: PSO1, PSO2, PSO3). Admins edit them in Settings.
 create table public.settings (
   id                   boolean primary key default true check (id),
   college_name         text not null default '',
-  allowed_email_domain text
+  allowed_email_domain text,
+  psos                 jsonb not null default '[]'
 );
-insert into public.settings (id) values (true);
+insert into public.settings (id, psos) values (true, '["Demonstrate their skills in designing, implementing and testing analogue and digital electronic circuits, including microprocessor systems, for signal processing, communication, networking, VLSI and embedded systems applications.", "Apply their knowledge and skills to conduct experiments and develop applications using electronic design automation (EDA) tools.", "Demonstrate a sense of professional ethics, recognize the importance of continued learning, and be able to carry out their professional and entrepreneurial responsibilities in electronics engineering field giving due consideration to environment protection and sustainability."]');
 
 -- A subject (course), e.g. EET413 Electric Drives, in a scheme (e.g. "2019 Scheme") and semester.
 create table public.subjects (
@@ -81,16 +83,18 @@ create table public.outcomes (
 );
 create index on public.outcomes (subject_id);
 
--- CO → WK (1–9) and CO → SDG (1–17). A row exists only for levels 1–3; no row means "–".
+-- CO → WK (1–9), SDG (1–17), PO (1–11) and PSO (1–3). A row exists only for levels 1–3; no row means "–".
 create table public.mappings (
   outcome_id    bigint not null references public.outcomes (id) on delete cascade,
-  kind          text not null check (kind in ('WK', 'SDG')),
+  kind          text not null constraint mappings_kind_check check (kind in ('WK', 'SDG', 'PO', 'PSO')),
   num           smallint not null,
   level         smallint not null check (level between 1 and 3),
   justification text not null default '',
   source        text not null default 'manual' check (source in ('manual', 'ai')),
   primary key (outcome_id, kind, num),
-  check ((kind = 'WK' and num between 1 and 9) or (kind = 'SDG' and num between 1 and 17))
+  constraint mappings_num_check check (
+    (kind = 'WK'  and num between 1 and 9)  or (kind = 'SDG' and num between 1 and 17) or
+    (kind = 'PO'  and num between 1 and 11) or (kind = 'PSO' and num between 1 and 3))
 );
 
 -- Subject list with progress counts (respects the access rules of the tables it reads).
@@ -100,7 +104,11 @@ select s.id, s.scheme, s.semester, s.code, s.name, s.department, s.updated_at,
        (select count(*) from public.mappings m join public.outcomes o on o.id = m.outcome_id
          where o.subject_id = s.id and m.kind = 'WK')::int  as wk_count,
        (select count(*) from public.mappings m join public.outcomes o on o.id = m.outcome_id
-         where o.subject_id = s.id and m.kind = 'SDG')::int as sdg_count
+         where o.subject_id = s.id and m.kind = 'SDG')::int as sdg_count,
+       (select count(*) from public.mappings m join public.outcomes o on o.id = m.outcome_id
+         where o.subject_id = s.id and m.kind = 'PO')::int  as po_count,
+       (select count(*) from public.mappings m join public.outcomes o on o.id = m.outcome_id
+         where o.subject_id = s.id and m.kind = 'PSO')::int as pso_count
 from public.subjects s;
 
 -- ─────────────── 3. Helper functions ───────────────
@@ -138,7 +146,7 @@ begin new.updated_at := now(); return new; end $$;
 create trigger subjects_touch before update on public.subjects
   for each row execute function public.touch_updated_at();
 
--- Replace a subject's WK and/or SDG mappings in one step (used by the AI).
+-- Replace a subject's WK / SDG / PO / PSO mappings in one step (used by the AI).
 -- rows: [{"co_no":1,"kind":"WK","num":2,"level":3,"justification":"...","source":"ai"}, ...]
 -- p_co_nos: only these COs are replaced (null = every CO of the subject).
 -- Runs as the caller, so the access rules below still apply. All or nothing.

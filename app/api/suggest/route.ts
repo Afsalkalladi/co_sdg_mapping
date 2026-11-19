@@ -1,16 +1,18 @@
 // ──────────────────────────────────────────────────────────────────────
 // WHAT: The AI mapping endpoint: POST /api/suggest. Runs on the SERVER (so the AI key stays secret).
+//       Maps the requested COs to WK, SDG, PO and PSO in ONE AI request.
 // FLOW: 1) Check the person is signed in and is an editor or admin.
-//       2) Load the requested COs of the subject from the database.
+//       2) Load the requested COs of the subject, and the PSO statements from Settings.
 //       3) Build the prompt (lib/ai.ts) and send it to the AI (lib/ai-server.ts).
 //       4) Read the AI's CSV answer (lib/ai.ts -> parseAiTable).
-//       5) Save it with the database function replace_mappings (replaces only those COs' WK/SDG rows).
+//       5) Save it with the database function replace_mappings (replaces only those COs' WK/SDG/PO/PSO rows).
 // CALLED BY: components/SubjectEditor.tsx -> runAi(), a few COs at a time.
 // ──────────────────────────────────────────────────────────────────────
 
 import { NextResponse } from "next/server";
 import { buildPrompt, parseAiTable } from "@/lib/ai";
 import { AiError, askAi } from "@/lib/ai-server";
+import { KINDS } from "@/lib/reference";
 import { createClient } from "@/lib/supabase/server";
 import type { Outcome } from "@/lib/types";
 
@@ -51,21 +53,26 @@ export async function POST(request: Request) {
   }
 
   // 3) Load the subject and the requested COs from the database.
-  const [{ data: subject }, { data: outcomes }] = await Promise.all([
+  const [{ data: subject }, { data: outcomes }, { data: settings }] = await Promise.all([
     supabase.from("subjects").select("code, name, department").eq("id", subjectId).maybeSingle(),
     supabase.from("outcomes").select("*").eq("subject_id", subjectId).in("co_no", coNos),
+    supabase.from("settings").select("psos").single(),
   ]);
   if (!subject) return NextResponse.json({ error: "Subject not found." }, { status: 404 });
   const cos = (outcomes ?? []) as Outcome[];
   if (!cos.length) return NextResponse.json({ error: "Those COs don't exist." }, { status: 404 });
+  // The programme's PSO statements (Settings). Without them, PSOs are left out of the mapping.
+  const psos = ((settings?.psos as string[] | null) ?? []).filter((t) => t.trim());
+  const kinds = KINDS.filter((k) => k !== "PSO" || psos.length > 0);
 
   try {
     // 4) Build the prompt, send it to the AI, wait for the answer.
-    const answer = await askAi(buildPrompt({ ...subject, outcomes: cos }));
+    const answer = await askAi(buildPrompt({ ...subject, outcomes: cos, psos }, kinds));
     // 5) Read the AI's CSV into rows (bad lines become warnings).
     const parsed = parseAiTable(
       answer,
       cos.map((o) => o.co_no),
+      psos.length,
     );
     if (!parsed.rows.length) {
       return NextResponse.json(
@@ -73,10 +80,10 @@ export async function POST(request: Request) {
         { status: 502 },
       );
     }
-    // 6) Save: replaces only THESE COs' WK and SDG mappings, all in one database transaction.
+    // 6) Save: replaces only THESE COs' WK/SDG/PO/PSO mappings, all in one database transaction.
     const { error } = await supabase.rpc("replace_mappings", {
       p_subject_id: subjectId,
-      p_kinds: ["WK", "SDG"],
+      p_kinds: kinds,
       p_rows: parsed.rows.map((r) => ({ ...r, source: "ai" })),
       p_co_nos: cos.map((o) => o.co_no),
     });
